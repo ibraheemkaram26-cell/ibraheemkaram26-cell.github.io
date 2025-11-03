@@ -10,16 +10,14 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
   <style>
-    /* General page styling */
     body {
       margin: 0;
       height: 100%;
       width: 100%;
+      background-color: #1c1c1c;
       font-family: Arial, sans-serif;
-      background-color: #1e1e1e;
     }
 
-    /* Map full screen */
     #map {
       position: absolute;
       width: 100%;
@@ -28,16 +26,22 @@
       bottom: 0;
     }
 
-    /* Custom control button (for locate) */
-    .leaflet-control-locate {
-      background: white;
-      padding: 6px;
-      border-radius: 5px;
-      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
-      cursor: pointer;
-      font-size: 18px;
-      text-align: center;
-      line-height: 20px;
+    /* قائمة الفلترة */
+    #filterContainer {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      z-index: 1000;
+    }
+
+    #filterContainer select {
+      padding: 4px;
+      border-radius: 4px;
+      border: 1px solid #999;
     }
 
     .leaflet-popup-content {
@@ -47,8 +51,20 @@
 </head>
 
 <body>
-
   <div id="map"></div>
+
+  <!-- قائمة الفلترة -->
+  <div id="filterContainer">
+    <label><b>نوع الحاوية:</b></label>
+    <select id="typeFilter">
+      <option value="all">الكل</option>
+      <option value="Plastic">بلاستيك</option>
+      <option value="Organic">عضوي</option>
+      <option value="Glass">زجاج</option>
+      <option value="Paper">ورق</option>
+      <option value="Mixed">مختلط</option>
+    </select>
+  </div>
 
   <!-- JS Libraries -->
   <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"></script>
@@ -56,128 +72,89 @@
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
   <script>
-    // ==============================
-    // 1️⃣ Map Initialization
-    // ==============================
-    const mapOptions = {
-      zoomSnap: 0.5,
+    // 🗺️ إعداد الخريطة
+    const map = L.map("map", {
       center: [31.9045, 35.2045],
-      zoom: 17.5
-    };
+      zoom: 17.5,
+      zoomSnap: 0.5
+    });
 
-    const map = L.map("map", mapOptions);
-
-    // ==============================
-    // 2️⃣ Basemap Layers
-    // ==============================
-    const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // 🗺️ خريطة الأساس
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> | © CARTO',
       subdomains: 'abcd',
       maxZoom: 20
     }).addTo(map);
 
-    const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20
-    });
-
-    // ==============================
-    // 3️⃣ GeoJSON Layers
-    // ==============================
     let zonesLayer;
     let wasteContainersLayer;
+    let allContainers = [];
 
-    // Load zones
+    // 🟡 تحميل مناطق رام الله
     $.getJSON("RamallahZones.json", function (RZ) {
       zonesLayer = L.geoJson(RZ, {
-        style: function (feature) {
-          return {
-            fillColor: "yellow",
-            fillOpacity: 0.3,
-            color: "yellow",
-            weight: 1.0,
-            opacity: 0.7
-          };
-        },
+        style: { fillColor: "yellow", fillOpacity: 0.3, color: "yellow", weight: 1 },
         onEachFeature: function (feature, layer) {
           layer.bindPopup(`<b>Zone Name:</b> ${feature.properties.NAME}`);
         }
       }).addTo(map);
     });
 
-    // Load waste containers
+    // 🟠 تحميل طبقة الحاويات مع ألوان وأيقونات
     $.getJSON("wasteContainer.json", function (WC) {
       wasteContainersLayer = L.geoJson(WC, {
         pointToLayer: function (feature, latlng) {
-          return L.circleMarker(latlng, {
-            radius: 5,
-            fillColor: "orange",
-            color: "orange",
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.8
+          const color = getColorByType(feature.properties.TYPE_OF_WA);
+          const icon = L.divIcon({
+            className: "custom-icon",
+            html: `<div style="background:${color}; width:14px; height:14px; border-radius:50%; border:2px solid white;"></div>`,
+            iconSize: [14, 14]
           });
+          return L.marker(latlng, { icon: icon });
         },
         onEachFeature: function (feature, layer) {
-          layer.bindPopup(`<b>Waste Type:</b> ${feature.properties.TYPE_OF_WA}`);
+          layer.bindPopup(`
+            <b>♻️ نوع النفايات:</b> ${feature.properties.TYPE_OF_WA}<br>
+            <b>📍 الإحداثيات:</b><br>${layer.getLatLng().lat.toFixed(5)}, ${layer.getLatLng().lng.toFixed(5)}
+          `);
+          allContainers.push(layer);
         }
       }).addTo(map);
     });
 
-    // ==============================
-    // 4️⃣ Controls
-    // ==============================
-    const baseLayers = {
-      "Dark Map": darkMap,
-      "Light Map": lightMap
-    };
+    // 🎨 تحديد اللون حسب نوع الحاوية
+    function getColorByType(type) {
+      switch (type) {
+        case "Plastic": return "#f5b700";
+        case "Organic": return "#2ecc71";
+        case "Glass": return "#3498db";
+        case "Paper": return "#d2691e";
+        case "Mixed": return "#bdc3c7";
+        default: return "orange";
+      }
+    }
 
-    const overlays = {
-      "Zones": zonesLayer,
-      "Waste Containers": wasteContainersLayer
-    };
+    // 🔍 فلترة حسب نوع الحاوية
+    document.getElementById("typeFilter").addEventListener("change", function () {
+      const selectedType = this.value;
+      wasteContainersLayer.clearLayers();
 
-    L.control.layers(baseLayers, overlays, { collapsed: true }).addTo(map);
+      const filtered = allContainers.filter(layer => {
+        return selectedType === "all" || layer.feature.properties.TYPE_OF_WA === selectedType;
+      });
 
-    // ==============================
-    // 5️⃣ Scale Bar
-    // ==============================
-    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
-
-    // ==============================
-    // 6️⃣ Locate Button
-    // ==============================
-    const locateControl = L.control({ position: 'topleft' });
-    locateControl.onAdd = function () {
-      const div = L.DomUtil.create('div', 'leaflet-control-locate');
-      div.innerHTML = "📍";
-      div.title = "Show my location";
-      div.onclick = function () {
-        map.locate({ setView: true, maxZoom: 18 });
-      };
-      return div;
-    };
-    locateControl.addTo(map);
-
-    map.on('locationfound', function (e) {
-      L.circleMarker(e.latlng, {
-        radius: 6,
-        fillColor: 'aqua',
-        color: '#0ff',
-        weight: 2,
-        fillOpacity: 0.9
-      }).addTo(map).bindPopup("📍 You are here").openPopup();
+      filtered.forEach(layer => {
+        wasteContainersLayer.addLayer(layer);
+      });
     });
 
-    // ==============================
-    // 7️⃣ Search Bar
-    // ==============================
-    L.Control.geocoder({
-      defaultMarkGeocode: true,
-      position: 'topleft'
-    }).addTo(map);
+    // 📏 مقياس الخريطة
+    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+
+    // 🔎 شريط البحث
+    L.Control.geocoder({ position: 'topleft' }).addTo(map);
 
   </script>
 </body>
+
 </html>
