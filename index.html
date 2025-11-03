@@ -10,31 +10,44 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
   <style>
+    /* General page styling */
     body {
       margin: 0;
       height: 100%;
       width: 100%;
-      background: linear-gradient(180deg, #1e1e1e, #2d2d2d);
+      font-family: Arial, sans-serif;
+      background-color: #1e1e1e;
     }
 
+    /* Map full screen */
     #map {
       position: absolute;
       width: 100%;
+      height: 100%;
       top: 0;
       bottom: 0;
     }
 
-    /* موقع زر تحديد الموقع */
+    /* Custom control button (for locate) */
     .leaflet-control-locate {
-      background-color: white;
+      background: white;
       padding: 6px;
-      border-radius: 4px;
+      border-radius: 5px;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
       cursor: pointer;
+      font-size: 18px;
+      text-align: center;
+      line-height: 20px;
+    }
+
+    .leaflet-popup-content {
+      font-size: 14px;
     }
   </style>
 </head>
 
 <body>
+
   <div id="map"></div>
 
   <!-- JS Libraries -->
@@ -43,27 +56,39 @@
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
   <script>
-    // إعدادات الخريطة
+    // ==============================
+    // 1️⃣ Map Initialization
+    // ==============================
     const mapOptions = {
       zoomSnap: 0.5,
       center: [31.9045, 35.2045],
-      zoom: 17.5,
+      zoom: 17.5
     };
 
     const map = L.map("map", mapOptions);
 
-    // خريطة الأساس
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // ==============================
+    // 2️⃣ Basemap Layers
+    // ==============================
+    const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> | © CARTO',
       subdomains: 'abcd',
       maxZoom: 20
     }).addTo(map);
 
-    // تعريف المتغيرات للطبقات
+    const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20
+    });
+
+    // ==============================
+    // 3️⃣ GeoJSON Layers
+    // ==============================
     let zonesLayer;
     let wasteContainersLayer;
 
-    // تحميل طبقة المناطق
+    // Load zones
     $.getJSON("RamallahZones.json", function (RZ) {
       zonesLayer = L.geoJson(RZ, {
         style: function (feature) {
@@ -76,48 +101,58 @@
           };
         },
         onEachFeature: function (feature, layer) {
-          layer.bindPopup("<b>Zone Name:</b> " + feature.properties.NAME);
+          layer.bindPopup(`<b>Zone Name:</b> ${feature.properties.NAME}`);
         }
       }).addTo(map);
     });
 
-    // تحميل طبقة الحاويات
+    // Load waste containers
     $.getJSON("wasteContainer.json", function (WC) {
-      // أيقونة مخصصة للحاويات
-      const containerIcon = L.icon({
-        iconUrl: "https://cdn-icons-png.flaticon.com/512/859/859270.png",
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-        popupAnchor: [0, -10]
-      });
-
       wasteContainersLayer = L.geoJson(WC, {
         pointToLayer: function (feature, latlng) {
-          return L.marker(latlng, { icon: containerIcon });
+          return L.circleMarker(latlng, {
+            radius: 5,
+            fillColor: "orange",
+            color: "orange",
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.8
+          });
         },
         onEachFeature: function (feature, layer) {
-          layer.bindPopup(
-            "<b>Type of Waste:</b> " + feature.properties.TYPE_OF_WA +
-            "<br><b>Location:</b> " + latlngToText(layer.getLatLng())
-          );
+          layer.bindPopup(`<b>Waste Type:</b> ${feature.properties.TYPE_OF_WA}`);
         }
       }).addTo(map);
     });
 
-    // تحويل الإحداثيات لنص لطيف
-    function latlngToText(latlng) {
-      return latlng.lat.toFixed(5) + ", " + latlng.lng.toFixed(5);
-    }
+    // ==============================
+    // 4️⃣ Controls
+    // ==============================
+    const baseLayers = {
+      "Dark Map": darkMap,
+      "Light Map": lightMap
+    };
 
-    // إضافة مقياس الخريطة
+    const overlays = {
+      "Zones": zonesLayer,
+      "Waste Containers": wasteContainersLayer
+    };
+
+    L.control.layers(baseLayers, overlays, { collapsed: true }).addTo(map);
+
+    // ==============================
+    // 5️⃣ Scale Bar
+    // ==============================
     L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
-    // زر تحديد موقعي الحالي
+    // ==============================
+    // 6️⃣ Locate Button
+    // ==============================
     const locateControl = L.control({ position: 'topleft' });
-    locateControl.onAdd = function (map) {
+    locateControl.onAdd = function () {
       const div = L.DomUtil.create('div', 'leaflet-control-locate');
-      div.innerHTML = '📍';
-      div.title = "Go to my location";
+      div.innerHTML = "📍";
+      div.title = "Show my location";
       div.onclick = function () {
         map.locate({ setView: true, maxZoom: 18 });
       };
@@ -125,7 +160,6 @@
     };
     locateControl.addTo(map);
 
-    // عند تحديد الموقع
     map.on('locationfound', function (e) {
       L.circleMarker(e.latlng, {
         radius: 6,
@@ -133,10 +167,12 @@
         color: '#0ff',
         weight: 2,
         fillOpacity: 0.9
-      }).addTo(map).bindPopup("📍 You are here!").openPopup();
+      }).addTo(map).bindPopup("📍 You are here").openPopup();
     });
 
-    // شريط البحث
+    // ==============================
+    // 7️⃣ Search Bar
+    // ==============================
     L.Control.geocoder({
       defaultMarkGeocode: true,
       position: 'topleft'
