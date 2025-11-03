@@ -1,71 +1,72 @@
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
   <meta charset="utf-8" />
-
-  <!-- Give the page a title -->
   <title>Ramallah Waste Containers</title>
 
-  <!-- Add a link to the Leaflet CSS library so you can reference it for styling your map -->
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
-  <!-- All the CSS code goes inside the style tags below -->
   <style>
-    /* style the body */
     body {
-      margin: 0px;
+      margin: 0;
       height: 100%;
       width: 100%;
+      background: linear-gradient(180deg, #1e1e1e, #2d2d2d);
     }
 
-    /* style the map */
     #map {
       position: absolute;
       width: 100%;
-      top: 0px;
+      top: 0;
       bottom: 0;
+    }
+
+    /* موقع زر تحديد الموقع */
+    .leaflet-control-locate {
+      background-color: white;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
     }
   </style>
 </head>
 
 <body>
-  <!-- the map -->
   <div id="map"></div>
 
-  <!-- Add a link to the Leaflet JavaScript library so you can reference it for building your map -->
+  <!-- JS Libraries -->
   <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"></script>
-
-  <!-- Add a link to the jQuery JavaScript library so you can leverage ajax methods to load your data -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
-  <!-- All JavaScript goes inside the script tags below -->
   <script>
-    // define map options
+    // إعدادات الخريطة
     const mapOptions = {
-      zoomSnap: 0.5,  // this allows fractional zooming
-      center: [31.9045, 35.2045], // center the map on the coordinates for Ramallah
-      zoom: 17.5, // set the initial zoom
+      zoomSnap: 0.5,
+      center: [31.9045, 35.2045],
+      zoom: 17.5,
     };
 
-    // define the map with the options above
     const map = L.map("map", mapOptions);
 
-// add a base map to the map
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 20
-}).addTo(map);
+    // خريطة الأساس
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> | © CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(map);
 
+    // تعريف المتغيرات للطبقات
+    let zonesLayer;
+    let wasteContainersLayer;
 
-// use jquery to load GeoJSON data
-
-
-   $.getJSON("RamallahZones.json", function(RZ) {
-      L.geoJson(RZ, {
-        style: function(feature) {
+    // تحميل طبقة المناطق
+    $.getJSON("RamallahZones.json", function (RZ) {
+      zonesLayer = L.geoJson(RZ, {
+        style: function (feature) {
           return {
             fillColor: "yellow",
             fillOpacity: 0.3,
@@ -74,47 +75,73 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             opacity: 0.7
           };
         },
-        onEachFeature: function(feature, layer) {
-          layer.on('click', function(e) {
-            alert("Zone Name: " + feature.properties.NAME);
-          });
+        onEachFeature: function (feature, layer) {
+          layer.bindPopup("<b>Zone Name:</b> " + feature.properties.NAME);
         }
       }).addTo(map);
     });
 
-    $.getJSON("wasteContainer.json", function(WC) {
-      L.geoJson(WC, {
-        pointToLayer: function(feature, latlng) {
-          return L.circleMarker(latlng, {
-            radius: 5,
-            fillColor: "orange",
-            color: "orange",
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.8
-          });
-         },
-        onEachFeature: function(feature, layer) {
-          layer.on('click', function(e) {
-            alert("WA: " + feature.properties.TYPE_OF_WA);
-          });
+    // تحميل طبقة الحاويات
+    $.getJSON("wasteContainer.json", function (WC) {
+      // أيقونة مخصصة للحاويات
+      const containerIcon = L.icon({
+        iconUrl: "https://cdn-icons-png.flaticon.com/512/859/859270.png",
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -10]
+      });
+
+      wasteContainersLayer = L.geoJson(WC, {
+        pointToLayer: function (feature, latlng) {
+          return L.marker(latlng, { icon: containerIcon });
+        },
+        onEachFeature: function (feature, layer) {
+          layer.bindPopup(
+            "<b>Type of Waste:</b> " + feature.properties.TYPE_OF_WA +
+            "<br><b>Location:</b> " + latlngToText(layer.getLatLng())
+          );
         }
       }).addTo(map);
     });
-    // Add layers to map with control options
-    const baseLayers = {};
-    const overlays = {
-      "Zones": zonesLayer,
-      "Waste Containers": wasteContainersLayer
+
+    // تحويل الإحداثيات لنص لطيف
+    function latlngToText(latlng) {
+      return latlng.lat.toFixed(5) + ", " + latlng.lng.toFixed(5);
+    }
+
+    // إضافة مقياس الخريطة
+    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+
+    // زر تحديد موقعي الحالي
+    const locateControl = L.control({ position: 'topleft' });
+    locateControl.onAdd = function (map) {
+      const div = L.DomUtil.create('div', 'leaflet-control-locate');
+      div.innerHTML = '📍';
+      div.title = "Go to my location";
+      div.onclick = function () {
+        map.locate({ setView: true, maxZoom: 18 });
+      };
+      return div;
     };
+    locateControl.addTo(map);
 
-    // Add layer control to the map
-    L.control.layers(baseLayers, overlays).addTo(map);
+    // عند تحديد الموقع
+    map.on('locationfound', function (e) {
+      L.circleMarker(e.latlng, {
+        radius: 6,
+        fillColor: 'aqua',
+        color: '#0ff',
+        weight: 2,
+        fillOpacity: 0.9
+      }).addTo(map).bindPopup("📍 You are here!").openPopup();
+    });
 
-    // Add both layers to the map by default
-    zonesLayer.addTo(map);
-    wasteContainersLayer.addTo(map);
+    // شريط البحث
+    L.Control.geocoder({
+      defaultMarkGeocode: true,
+      position: 'topleft'
+    }).addTo(map);
+
   </script>
 </body>
-
 </html>
