@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar">
 
 <head>
   <meta charset="utf-8" />
   <title>Ramallah Waste Containers</title>
 
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
   <style>
@@ -14,8 +14,9 @@
       margin: 0;
       height: 100%;
       width: 100%;
-      background-color: #1c1c1c;
+      background-color: #0f0f0f;
       font-family: "Segoe UI", Arial, sans-serif;
+      color: #fff;
     }
 
     #map {
@@ -27,219 +28,4 @@
     }
 
     /* قائمة الفلترة */
-    #filterContainer {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(255, 255, 255, 0.95);
-      padding: 10px 14px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-      font-size: 14px;
-      z-index: 1000;
-      transition: 0.3s;
-    }
-
-    #filterContainer:hover {
-      transform: scale(1.03);
-    }
-
-    #filterContainer select {
-      padding: 5px 6px;
-      border-radius: 4px;
-      border: 1px solid #999;
-      margin-left: 6px;
-    }
-
-    /* عداد الحاويات */
-    #counter {
-      position: absolute;
-      bottom: 15px;
-      right: 15px;
-      background: rgba(0, 0, 0, 0.7);
-      color: #fff;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      z-index: 1000;
-    }
-
-    /* زر تحديد موقعي */
-    .leaflet-control-locate {
-      background: white;
-      padding: 6px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 18px;
-      text-align: center;
-      line-height: 20px;
-    }
-
-    /* Popup تصميم أجمل */
-    .leaflet-popup-content {
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .popup-title {
-      color: #ff9800;
-      font-weight: bold;
-      font-size: 15px;
-    }
-  </style>
-</head>
-
-<body>
-  <div id="map"></div>
-
-  <!-- قائمة الفلترة -->
-  <div id="filterContainer">
-    <label><b>نوع الحاوية:</b></label>
-    <select id="typeFilter">
-      <option value="all">الكل</option>
-      <option value="Plastic">بلاستيك</option>
-      <option value="Organic">عضوي</option>
-      <option value="Glass">زجاج</option>
-      <option value="Paper">ورق</option>
-      <option value="Mixed">مختلط</option>
-    </select>
-  </div>
-
-  <!-- عداد الحاويات -->
-  <div id="counter">عدد الحاويات المعروضة: 0</div>
-
-  <!-- JS Libraries -->
-  <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
-
-  <script>
-    // 🗺️ إعداد الخريطة
-    const map = L.map("map", {
-      center: [31.9045, 35.2045],
-      zoom: 17.5,
-      zoomSnap: 0.5
-    });
-
-    // 🗺️ خريطتان أساسيتان (داكنة + فاتحة)
-    const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap | CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20
-    }).addTo(map);
-
-    const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap | CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20
-    });
-
-    let zonesLayer;
-    let wasteContainersLayer = L.layerGroup().addTo(map);
-    let allContainers = [];
-
-    // 🟡 تحميل مناطق رام الله
-    $.getJSON("RamallahZones.json", function (RZ) {
-      zonesLayer = L.geoJson(RZ, {
-        style: { fillColor: "yellow", fillOpacity: 0.3, color: "yellow", weight: 1 },
-        onEachFeature: (feature, layer) => {
-          layer.bindPopup(`<div class='popup-title'>المنطقة</div>${feature.properties.NAME}`);
-        }
-      }).addTo(map);
-    });
-
-    // 🟠 تحميل طبقة الحاويات مع ألوان وأيقونات + تأثير hover
-    $.getJSON("wasteContainer.json", function (WC) {
-      WC.features.forEach(feature => {
-        const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
-        const color = getColorByType(feature.properties.TYPE_OF_WA);
-
-        const icon = L.divIcon({
-          className: "custom-icon",
-          html: `<div style="background:${color}; width:14px; height:14px; border-radius:50%; border:2px solid white;"></div>`,
-          iconSize: [14, 14]
-        });
-
-        const marker = L.marker(latlng, { icon });
-
-        // Popup منسق
-        marker.bindPopup(`
-          <div class="popup-title">♻️ نوع النفايات:</div> ${feature.properties.TYPE_OF_WA}<br>
-          <div><b>📍 الإحداثيات:</b><br>${latlng[0].toFixed(5)}, ${latlng[1].toFixed(5)}</div>
-        `);
-
-        // تأثير hover
-        marker.on("mouseover", () => marker._icon.style.transform = "scale(1.4)");
-        marker.on("mouseout", () => marker._icon.style.transform = "scale(1)");
-
-        wasteContainersLayer.addLayer(marker);
-        allContainers.push({ marker, type: feature.properties.TYPE_OF_WA });
-      });
-
-      updateCounter(allContainers.length);
-    });
-
-    // 🎨 ألوان حسب نوع الحاوية
-    function getColorByType(type) {
-      switch (type) {
-        case "Plastic": return "#f5b700";
-        case "Organic": return "#2ecc71";
-        case "Glass": return "#3498db";
-        case "Paper": return "#d2691e";
-        case "Mixed": return "#bdc3c7";
-        default: return "orange";
-      }
-    }
-
-    // 🔍 فلترة الحاويات حسب النوع
-    document.getElementById("typeFilter").addEventListener("change", function () {
-      const selectedType = this.value;
-      wasteContainersLayer.clearLayers();
-
-      const filtered = allContainers.filter(item =>
-        selectedType === "all" || item.type === selectedType
-      );
-
-      filtered.forEach(item => wasteContainersLayer.addLayer(item.marker));
-      updateCounter(filtered.length);
-    });
-
-    // 📊 عداد الحاويات
-    function updateCounter(count) {
-      document.getElementById("counter").innerText = `عدد الحاويات المعروضة: ${count}`;
-    }
-
-    // 📏 مقياس الخريطة
-    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
-
-    // 🔎 شريط البحث
-    L.Control.geocoder({ position: 'topleft' }).addTo(map);
-
-    // 🧭 زر تحديد موقعي الحالي
-    const locateControl = L.control({ position: 'topleft' });
-    locateControl.onAdd = function () {
-      const div = L.DomUtil.create('div', 'leaflet-control-locate');
-      div.innerHTML = "📍";
-      div.title = "تحديد موقعي الحالي";
-      div.onclick = function () {
-        map.locate({ setView: true, maxZoom: 18 });
-      };
-      return div;
-    };
-    locateControl.addTo(map);
-
-    map.on('locationfound', e => {
-      L.circleMarker(e.latlng, {
-        radius: 6,
-        fillColor: 'aqua',
-        color: '#00ffff',
-        weight: 2,
-        fillOpacity: 0.9
-      }).addTo(map).bindPopup("📍 أنت هنا").openPopup();
-    });
-
-    // 🗺️ التحكم في الطبقات
-    L.control.layers({ "الخريطة الداكنة": darkMap, "الخريطة الفاتحة": lightMap }, { "المناطق": zonesLayer, "الحاويات": wasteContainersLayer }).addTo(map);
-  </script>
-</body>
-</html>
+    #filterContain
