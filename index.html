@@ -28,4 +28,297 @@
     }
 
     /* قائمة الفلترة */
-    #filterContain
+    #filterContainer {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.97);
+      padding: 10px 14px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+      font-size: 14px;
+      z-index: 1000;
+      transition: all 0.3s ease;
+      color: #222;
+    }
+
+    #filterContainer:hover {
+      transform: scale(1.03);
+    }
+
+    #filterContainer select {
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px solid #999;
+      margin-left: 6px;
+      cursor: pointer;
+    }
+
+    /* عداد الحاويات */
+    #counter {
+      position: absolute;
+      bottom: 15px;
+      right: 15px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      z-index: 1000;
+      line-height: 1.6;
+    }
+
+    /* زر تحديد موقعي */
+    .leaflet-control-locate {
+      background: white;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 18px;
+      text-align: center;
+      line-height: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Popup تصميم حديث */
+    .leaflet-popup-content {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .popup-title {
+      color: #ff9800;
+      font-weight: bold;
+      font-size: 15px;
+    }
+
+    /* زر أقرب حاوية */
+    .find-nearest-btn {
+      position: absolute;
+      top: 70px;
+      right: 10px;
+      background: #2ecc71;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+      transition: background 0.3s;
+      z-index: 1000;
+    }
+
+    .find-nearest-btn:hover {
+      background: #27ae60;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <!-- قائمة الفلترة -->
+  <div id="filterContainer">
+    <label><b>نوع الحاوية:</b></label>
+    <select id="typeFilter">
+      <option value="all">الكل</option>
+      <option value="Plastic">بلاستيك</option>
+      <option value="Organic">عضوي</option>
+      <option value="Glass">زجاج</option>
+      <option value="Paper">ورق</option>
+      <option value="Mixed">مختلط</option>
+    </select>
+  </div>
+
+  <!-- زر أقرب حاوية -->
+  <button class="find-nearest-btn" id="findNearest">🔍 أقرب حاوية</button>
+
+  <!-- عداد الحاويات -->
+  <div id="counter">
+    عدد الحاويات المعروضة: 0<br>
+    <span id="typeBreakdown"></span>
+  </div>
+
+  <!-- JS Libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <script>
+    // 🗺️ إعداد الخريطة
+    const map = L.map("map", {
+      center: [31.9045, 35.2045],
+      zoom: 17,
+      zoomSnap: 0.5
+    });
+
+    // 🗺️ خريطة داكنة + فاتحة + قمر صناعي
+    const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap | CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20
+    }).addTo(map);
+
+    const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap | CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20
+    });
+
+    const satelliteMap = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      maxZoom: 20,
+      subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+      attribution: '&copy; Google'
+    });
+
+    let zonesLayer;
+    let wasteContainersLayer = L.layerGroup().addTo(map);
+    let allContainers = [];
+
+    // 🟡 تحميل مناطق رام الله
+    $.getJSON("RamallahZones.json", function (RZ) {
+      zonesLayer = L.geoJson(RZ, {
+        style: { fillColor: "yellow", fillOpacity: 0.25, color: "yellow", weight: 1 },
+        onEachFeature: (feature, layer) => {
+          layer.bindPopup(`<div class='popup-title'>المنطقة</div>${feature.properties.NAME}`);
+        }
+      }).addTo(map);
+    });
+
+    // 🟠 تحميل طبقة الحاويات
+    $.getJSON("wasteContainer.json", function (WC) {
+      WC.features.forEach(feature => {
+        const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+        const color = getColorByType(feature.properties.TYPE_OF_WA);
+
+        const icon = L.divIcon({
+          className: "custom-icon",
+          html: `<div style="background:${color}; width:14px; height:14px; border-radius:50%; border:2px solid white;"></div>`,
+          iconSize: [14, 14]
+        });
+
+        const marker = L.marker(latlng, { icon });
+        marker.bindPopup(`
+          <div class="popup-title">♻️ نوع النفايات:</div> ${feature.properties.TYPE_OF_WA}<br>
+          <div><b>📍 الإحداثيات:</b><br>${latlng[0].toFixed(5)}, ${latlng[1].toFixed(5)}</div>
+        `);
+
+        marker.on("mouseover", () => marker._icon.style.transform = "scale(1.5)");
+        marker.on("mouseout", () => marker._icon.style.transform = "scale(1)");
+
+        wasteContainersLayer.addLayer(marker);
+        allContainers.push({ marker, type: feature.properties.TYPE_OF_WA, latlng });
+      });
+
+      updateCounter(allContainers);
+    });
+
+    // 🎨 ألوان حسب النوع
+    function getColorByType(type) {
+      switch (type) {
+        case "Plastic": return "#f5b700";
+        case "Organic": return "#2ecc71";
+        case "Glass": return "#3498db";
+        case "Paper": return "#d2691e";
+        case "Mixed": return "#bdc3c7";
+        default: return "orange";
+      }
+    }
+
+    // 🔍 فلترة حسب النوع
+    document.getElementById("typeFilter").addEventListener("change", function () {
+      const selectedType = this.value;
+      wasteContainersLayer.clearLayers();
+
+      const filtered = allContainers.filter(item =>
+        selectedType === "all" || item.type === selectedType
+      );
+
+      filtered.forEach(item => wasteContainersLayer.addLayer(item.marker));
+      updateCounter(filtered);
+    });
+
+    // 📊 عداد الحاويات وتحليل حسب النوع
+    function updateCounter(containers) {
+      document.getElementById("counter").innerHTML = `
+        عدد الحاويات المعروضة: ${containers.length}<br>
+        ${getTypeBreakdown(containers)}
+      `;
+    }
+
+    function getTypeBreakdown(list) {
+      const counts = {};
+      list.forEach(i => counts[i.type] = (counts[i.type] || 0) + 1);
+      return Object.entries(counts)
+        .map(([t, c]) => `<span style="color:${getColorByType(t)}">●</span> ${t}: ${c}`)
+        .join(" | ");
+    }
+
+    // 🧭 زر تحديد موقعي
+    const locateControl = L.control({ position: 'topleft' });
+    locateControl.onAdd = function () {
+      const div = L.DomUtil.create('div', 'leaflet-control-locate');
+      div.innerHTML = "📍";
+      div.title = "تحديد موقعي الحالي";
+      div.onclick = function () {
+        map.locate({ setView: true, maxZoom: 18 });
+      };
+      return div;
+    };
+    locateControl.addTo(map);
+
+    map.on('locationfound', e => {
+      L.circleMarker(e.latlng, {
+        radius: 6,
+        fillColor: 'aqua',
+        color: '#00ffff',
+        weight: 2,
+        fillOpacity: 0.9
+      }).addTo(map).bindPopup("📍 أنت هنا").openPopup();
+      userLocation = e.latlng;
+    });
+
+    // 🔎 زر أقرب حاوية
+    let userLocation = null;
+    document.getElementById("findNearest").addEventListener("click", () => {
+      if (!userLocation) {
+        alert("يرجى تحديد موقعك أولاً 📍");
+        map.locate({ setView: true, maxZoom: 18 });
+        return;
+      }
+
+      let nearest = null;
+      let minDist = Infinity;
+
+      allContainers.forEach(c => {
+        const dist = map.distance(userLocation, c.latlng);
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = c;
+        }
+      });
+
+      if (nearest) {
+        L.polyline([userLocation, nearest.latlng], { color: "lime", weight: 3, dashArray: "5,8" })
+          .addTo(map)
+          .bindPopup(`أقرب حاوية (${nearest.type}) تبعد ${(minDist).toFixed(1)} متر`).openPopup();
+
+        map.setView(nearest.latlng, 18);
+      }
+    });
+
+    // ⚙️ أدوات الخريطة
+    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+    L.Control.geocoder({ position: 'topleft' }).addTo(map);
+
+    L.control.layers(
+      { "الخريطة الداكنة": darkMap, "الخريطة الفاتحة": lightMap, "القمر الصناعي": satelliteMap },
+      { "المناطق": zonesLayer, "الحاويات": wasteContainersLayer }
+    ).addTo(map);
+  </script>
+</body>
+
+</html>
+
